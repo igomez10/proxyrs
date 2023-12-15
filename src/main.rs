@@ -1,134 +1,38 @@
+mod utils;
+
 use env_logger;
-use log::{debug, error, info, warn};
 use std::net::{TcpListener, ToSocketAddrs};
 use std::{
     io::{Read, Write},
     net::TcpStream,
 };
+use utils::{HttpRequest, HttpResponse};
+
+use crate::utils::FromStream;
 
 fn main() {
     env_logger::init();
     log::info!("Starting rust server");
     dotenv::dotenv().ok();
     let port = std::env::var("PORT").unwrap_or_else(|_| "9095".to_string());
+
     listen(&port);
-}
-
-trait FromStream {
-    fn from_stream(stream: &mut TcpStream) -> Self;
-}
-
-// struct to represent HTTP Request
-#[derive(Debug)]
-struct HttpRequest {
-    method: String,
-    url: String,
-    headers: Vec<String>,
-    body: String,
-}
-
-impl FromStream for HttpRequest {
-    fn from_stream(stream: &mut TcpStream) -> Self {
-        let mut buffer = [0; 4096];
-        stream
-            .read(&mut buffer)
-            .expect("failed to read from socket");
-        let request = String::from_utf8_lossy(&buffer).to_string();
-        let mut lines = request.lines();
-        let first_line = lines.next().unwrap();
-        let mut words = first_line.split_whitespace();
-        let method = words.next().unwrap();
-        let url = words.next().unwrap();
-        let mut headers = Vec::new();
-        for line in lines.clone() {
-            if line.is_empty() {
-                break;
-            }
-            headers.push(line.to_string());
-        }
-        let body = lines.collect::<Vec<&str>>().join("\n");
-        Self {
-            method: method.to_string(),
-            url: url.to_string(),
-            headers,
-            body,
-        }
-    }
-}
-
-// struct to represent HTTP Response
-#[derive(Debug)]
-struct HttpResponse {
-    status_code: u32,
-    headers: Vec<String>,
-    body: String,
-}
-
-impl HttpResponse {
-    fn to_string(&self) -> String {
-        let reason_phrase = match self.status_code {
-            200 => "OK",
-            404 => "Not Found",
-            401 => "Unauthorized",
-            403 => "Forbidden",
-            405 => "Method Not Allowed",
-            406 => "Not Acceptable",
-            500 => "Internal Server Error",
-            501 => "Not Implemented",
-            502 => "Bad Gateway",
-            // Add other status codes as needed
-            _ => "Unknown",
-        };
-
-        format!(
-            "HTTP/1.1 {} {}\r\n{}\r\n\r\n{}",
-            self.status_code,
-            reason_phrase,
-            self.headers.join("\r\n"),
-            self.body
-        )
-    }
-}
-
-impl FromStream for HttpResponse {
-    fn from_stream(stream: &mut TcpStream) -> Self {
-        let mut buffer = [0; 1024];
-        stream
-            .read(&mut buffer)
-            .expect("failed to read from socket");
-        let response = String::from_utf8_lossy(&buffer).to_string();
-        let mut lines = response.lines();
-        let first_line = lines.next().unwrap();
-        let mut words = first_line.split_whitespace();
-        let _http_version = words.next().unwrap();
-        let status_code = words.next().unwrap().parse::<u32>().unwrap();
-        let mut headers = Vec::new();
-        for line in lines.clone() {
-            if line.is_empty() {
-                break;
-            }
-            headers.push(line.to_string());
-        }
-        let body = lines.collect::<Vec<&str>>().join("\n");
-        Self {
-            status_code,
-            headers,
-            body,
-        }
-    }
 }
 
 // function to listen incoming tcp connections on port
 fn listen(port: &str) {
-    let listener = TcpListener::bind(format!("0.0.0.0:{}", port)).expect("Failed to bind to port");
+    let listener =
+        TcpListener::bind(format!("127.0.0.1:{}", port)).expect("Failed to bind to port");
     log::info!("Listening on port {}", port);
     loop {
         match listener.accept() {
             Ok((mut socket, addr)) => {
                 log::info!("new client: {:?}", addr);
                 let request = HttpRequest::from_stream(&mut socket);
-                log::info!("request: {:?}", request);
-
+                log::info!("request: {:?}", request.clone());
+                let host_header = request.headers.get("Host");
+                log::info!("host header: {:?}", host_header);
+                log::info!("url: {:?}", request.url);
                 let response = HttpResponse {
                     status_code: 200,
                     headers: vec![
