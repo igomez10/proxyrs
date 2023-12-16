@@ -26,8 +26,7 @@ fn health_handler(socket: &mut TcpStream) {
 
 // function to listen incoming tcp connections on port
 fn listen(port: &str) {
-    let listener =
-        TcpListener::bind(format!("127.0.0.1:{}", port)).expect("Failed to bind to port");
+    let listener = TcpListener::bind(format!("0.0.0.0:{}", port)).expect("Failed to bind to port");
     log::info!("Listening on port {}", port);
     loop {
         match listener.accept() {
