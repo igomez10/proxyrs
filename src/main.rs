@@ -5,14 +5,18 @@ use std::collections::HashMap;
 use std::net::TcpStream;
 use std::net::{SocketAddr, TcpListener};
 use utils::{HttpRequest, HttpResponse};
+extern crate dotenv;
+use dotenv::dotenv;
+use std::env;
 
 fn main() {
+    dotenv().ok().expect("Failed to read .env file");
     env_logger::init();
-    log::info!("Starting rust server");
-    dotenv::dotenv().ok();
-    let port = std::env::var("PORT").unwrap_or_else(|_| "9095".to_string());
+    println!("Starting rust server");
 
-    listen(&port);
+    let address = std::env::var("ADDRESS").unwrap_or_else(|_| "0.0.0.0".to_string());
+    let port = std::env::var("PORT").unwrap_or_else(|_| "9095".to_string());
+    listen(&address, &port);
 }
 
 fn health_handler(socket: &mut TcpStream) {
@@ -25,8 +29,9 @@ fn health_handler(socket: &mut TcpStream) {
 }
 
 // function to listen incoming tcp connections on port
-fn listen(port: &str) {
-    let listener = TcpListener::bind(format!("0.0.0.0:{}", port)).expect("Failed to bind to port");
+fn listen(address: &str, port: &str) {
+    let listener =
+        TcpListener::bind(format!("{}:{}", address, port)).expect("Failed to bind to port");
     log::info!("Listening on port {}", port);
     loop {
         match listener.accept() {
@@ -35,8 +40,9 @@ fn listen(port: &str) {
                 let request = HttpRequest::from_stream(&mut socket);
                 if request.url.contains("/health")
                     || request.url.contains("/favicon.ico")
-                    || request.url.contains("/")
+                    || !request.headers.contains_key("Proxy-Connection")
                 {
+                    log::debug!("ignore request: {:?}", request.clone());
                     health_handler(&mut socket);
                     close_socket(&mut socket);
                     continue;
