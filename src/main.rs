@@ -10,7 +10,10 @@ use dotenv::dotenv;
 use std::env;
 
 fn main() {
-    dotenv().ok().expect("Failed to read .env file");
+    match dotenv().ok() {
+        Some(_) => println!("dotenv loaded"),
+        None => println!("dotenv not loaded"),
+    }
     env_logger::init();
     println!("Starting rust server");
 
