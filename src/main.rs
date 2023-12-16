@@ -33,7 +33,10 @@ fn listen(port: &str) {
             Ok((mut socket, addr)) => {
                 log::info!("incoming request from: {:?}", addr);
                 let request = HttpRequest::from_stream(&mut socket);
-                if request.url.contains("/health") || request.url.contains("/favicon.ico") {
+                if request.url.contains("/health")
+                    || request.url.contains("/favicon.ico")
+                    || request.url.contains("/")
+                {
                     health_handler(&mut socket);
                     close_socket(&mut socket);
                     continue;
