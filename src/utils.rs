@@ -2,7 +2,6 @@ use dns_lookup::lookup_host;
 use std::collections::HashMap;
 use std::io::Write;
 use std::net::{IpAddr, SocketAddr};
-use std::string;
 use std::{io::Read, net::TcpStream};
 
 pub trait FromStream {
@@ -200,7 +199,7 @@ pub fn write_to_stream(stream: &mut TcpStream, message: &str) {
 
 // function read_from_stream reads from socket and returns the result as a string
 // this reads until the socket is closed
-pub fn read_from_stream(stream: &mut TcpStream) -> String {
+pub fn _read_from_stream(stream: &mut TcpStream) -> String {
     // vector to store all the bytes read from socket
     let mut buffer = [0; 1024];
 

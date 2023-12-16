@@ -2,11 +2,8 @@ mod utils;
 use crate::utils::FromStream;
 use env_logger;
 use std::collections::HashMap;
-use std::net::{IpAddr, SocketAddr, TcpListener, ToSocketAddrs};
-use std::{
-    io::{Read, Write},
-    net::TcpStream,
-};
+use std::net::TcpStream;
+use std::net::{SocketAddr, TcpListener};
 use utils::{HttpRequest, HttpResponse};
 
 fn main() {
@@ -68,14 +65,8 @@ fn close_socket(socket: &mut TcpStream) {
     }
 }
 
-fn curl(_flags: &[String]) {
-    let address = _flags[0].as_str();
-    let method = "GET".to_string();
-    http_request(&method, address);
-}
-
 // function to execute HTTP Request
-fn http_request(method: &str, url: &str) -> Result<HttpResponse, Box<dyn std::error::Error>> {
+fn _http_request(method: &str, url: &str) -> Result<HttpResponse, Box<dyn std::error::Error>> {
     let url = url::Url::parse(url).expect("failed to parse url");
     let ip_address = utils::nslookup(url.host().unwrap().to_string().as_str());
 
