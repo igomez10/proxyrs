@@ -1,13 +1,17 @@
+mod http_request;
+mod http_response;
 mod utils;
-use crate::utils::FromStream;
+extern crate dotenv;
 use env_logger;
+use http_request::HttpRequest;
+use http_response::{HttpResponse, StatusCode};
 use std::collections::HashMap;
 use std::net::TcpStream;
 use std::net::{SocketAddr, TcpListener};
-use utils::{HttpRequest, HttpResponse};
-extern crate dotenv;
+
 use dotenv::dotenv;
-use std::env;
+
+use crate::http_request::HTTPClient;
 
 fn main() {
     match dotenv().ok() {
@@ -23,8 +27,8 @@ fn main() {
 }
 
 fn health_handler(socket: &mut TcpStream) {
-    let response = HttpResponse {
-        status_code: 200,
+    let response = http_response::HttpResponse {
+        status_code: StatusCode::OK,
         headers: HashMap::new(),
         body: "OK".to_string(),
     };
@@ -36,26 +40,41 @@ fn listen(address: &str, port: &str) {
     let listener =
         TcpListener::bind(format!("{}:{}", address, port)).expect("Failed to bind to port");
     log::info!("Listening on port {}", port);
+    let client = HTTPClient::new(HashMap::new());
+
     loop {
         match listener.accept() {
             Ok((mut socket, addr)) => {
                 log::info!("incoming request from: {:?}", addr);
-                let request = HttpRequest::from_stream(&mut socket);
-                if request.url.contains("/health")
-                    || request.url.contains("/favicon.ico")
-                    || !request.headers.contains_key("Proxy-Connection")
+                let request_string = utils::read_from_stream(&mut socket);
+                let request = match HttpRequest::from_string(&request_string) {
+                    Ok(request) => request,
+                    Err(e) => {
+                        log::error!("failed to parse request: {:?}", e);
+                        let response = HttpResponse {
+                            status_code: StatusCode::InvalidRequest,
+                            headers: HashMap::new(),
+                            body: "Bad Request".to_string(),
+                        };
+                        utils::write_to_stream(&mut socket, &response.to_string());
+                        close_socket(socket);
+                        continue;
+                    }
+                };
+
+                if request.url.as_str().contains("/health")
+                    || request.url.as_str().contains("/favicon.ico")
+                // || !request.headers.contains_key("Proxy-Connection")
                 {
                     log::debug!("ignore request: {:?}", request.clone());
                     health_handler(&mut socket);
-                    close_socket(&mut socket);
+                    close_socket(socket);
                     continue;
                 }
-                log::info!("request: {:?}", request.clone());
-                let actual_response = request.execute().expect("failed to execute request");
 
-                log::info!("actual response: {:?}", actual_response);
+                let actual_response = client.execute(request).expect("failed to execute request");
                 utils::write_to_stream(&mut socket, &actual_response.to_string());
-                close_socket(&mut socket)
+                close_socket(socket)
             }
             Err(e) => {
                 log::error!("couldn't get client: {:?}", e);
@@ -64,7 +83,7 @@ fn listen(address: &str, port: &str) {
     }
 }
 
-fn close_socket(socket: &mut TcpStream) {
+fn close_socket(socket: TcpStream) {
     let res = socket.shutdown(std::net::Shutdown::Both);
     match res {
         Ok(_num_bytes) => {
@@ -74,26 +93,4 @@ fn close_socket(socket: &mut TcpStream) {
             log::error!("failed to close socket {:?}", _e);
         }
     }
-}
-
-// function to execute HTTP Request
-fn _http_request(method: &str, url: &str) -> Result<HttpResponse, Box<dyn std::error::Error>> {
-    let url = url::Url::parse(url).expect("failed to parse url");
-    let ip_address = utils::nslookup(url.host().unwrap().to_string().as_str());
-
-    let port = url.port().unwrap_or(80);
-
-    let socket_address = SocketAddr::new(ip_address, port);
-    let mut stream = TcpStream::connect(socket_address).expect("failed to connect to server");
-
-    let host_header = format!("Host: {}\r\n", url);
-    let method = format!("{} / HTTP/1.1\r\n", method);
-    utils::write_to_stream(&mut stream, &method);
-    utils::write_to_stream(&mut stream, &host_header);
-    utils::write_to_stream(&mut stream, "User-Agent: curl/7.64.1\r\n");
-    utils::write_to_stream(&mut stream, "Accept: */*\r\n");
-    utils::write_to_stream(&mut stream, "\r\n");
-    // TODO: write json body
-    let response = HttpResponse::from_stream(&mut stream);
-    Ok(response)
 }
