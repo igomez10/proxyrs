@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use url::Url;
 // struct to represent HTTP Request
 #[derive(Debug, Clone)]
 pub struct HttpRequest {
@@ -57,16 +58,16 @@ impl HttpRequest {
 
         let host_header = headers.get("Host").expect("missing host header");
         let is_proxy_request = resource.starts_with("http://") || resource.starts_with("https://");
-        let url = if is_proxy_request {
-            url::Url::parse(resource).unwrap()
+        let request_url = if is_proxy_request {
+            Url::parse(resource).unwrap()
         } else {
             let url_str = format!("{}{}", host_header, resource);
-            url::Url::parse(&url_str).unwrap()
+            Url::parse(&url_str).unwrap()
         };
 
         Ok(Self {
             method,
-            url,
+            url: request_url,
             headers,
             body,
         })
