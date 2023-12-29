@@ -13,13 +13,10 @@ impl HttpResponse {
         let reason_phrase = self.status_code.to_reason_phrase();
         let mut headers_vec: Vec<String> = Vec::new();
 
-        for header in self.headers.clone() {
+        for header in self.headers.iter() {
             let key = header.0;
             let value = header.1;
-            // TODO: fix this hack
-            // if key != "Content-Length" {
             headers_vec.insert(0, format!("{}: {}\r\n", key, value));
-            // }
         }
 
         // sort lexicographically

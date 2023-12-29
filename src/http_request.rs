@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-
 // struct to represent HTTP Request
 #[derive(Debug, Clone)]
 pub struct HttpRequest {
