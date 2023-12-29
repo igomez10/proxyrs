@@ -2,14 +2,13 @@ mod http_request;
 mod http_response;
 mod utils;
 extern crate dotenv;
+use dotenv::dotenv;
 use env_logger;
 use http_request::HttpRequest;
 use http_response::{HttpResponse, StatusCode};
 use std::collections::HashMap;
+use std::net::TcpListener;
 use std::net::TcpStream;
-use std::net::{SocketAddr, TcpListener};
-
-use dotenv::dotenv;
 
 use crate::http_request::HTTPClient;
 
@@ -29,7 +28,7 @@ fn main() {
 fn health_handler(socket: &mut TcpStream) {
     let response = http_response::HttpResponse {
         status_code: StatusCode::OK,
-        headers: HashMap::new(),
+        headers: HashMap::from([("Content-Length".to_string(), "2".to_string())]),
         body: "OK".to_string(),
     };
     utils::write_to_stream(socket, &response.to_string());
@@ -46,7 +45,21 @@ fn listen(address: &str, port: &str) {
         match listener.accept() {
             Ok((mut socket, addr)) => {
                 log::info!("incoming request from: {:?}", addr);
-                let request_string = utils::read_from_stream(&mut socket);
+                let request_string = match utils::read_from_stream(&mut socket) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        log::error!("failed to read from stream: {:?}", e);
+                        let response = HttpResponse {
+                            status_code: StatusCode::InvalidRequest,
+                            headers: HashMap::new(),
+                            body: "Bad Request".to_string(),
+                        };
+                        utils::write_to_stream(&mut socket, &response.to_string());
+                        close_socket(socket);
+                        continue;
+                    }
+                };
+
                 let request = match HttpRequest::from_string(&request_string) {
                     Ok(request) => request,
                     Err(e) => {
@@ -72,7 +85,21 @@ fn listen(address: &str, port: &str) {
                     continue;
                 }
 
-                let actual_response = client.execute(request).expect("failed to execute request");
+                let actual_response = match client.execute(request) {
+                    Ok(response) => response,
+                    Err(e) => {
+                        log::error!("failed to execute request: {:?}", e);
+                        let response = HttpResponse {
+                            status_code: StatusCode::InternalServerError,
+                            headers: HashMap::new(),
+                            body: "Bad Request".to_string(),
+                        };
+                        utils::write_to_stream(&mut socket, &response.to_string());
+                        close_socket(socket);
+                        continue;
+                    }
+                };
+
                 utils::write_to_stream(&mut socket, &actual_response.to_string());
                 close_socket(socket)
             }
@@ -92,5 +119,31 @@ fn close_socket(socket: TcpStream) {
         Err(_e) => {
             log::error!("failed to close socket {:?}", _e);
         }
+    }
+}
+
+// tests
+#[test]
+fn test_listen() {
+    use std::thread;
+
+    let _handle = thread::spawn(|| listen("localhost", "5656"));
+
+    let client = HTTPClient::new(HashMap::new());
+
+    let request = HttpRequest {
+        method: http_request::Method::GET,
+        body: "".to_string(),
+        url: url::Url::parse("http://localhost:5656/health").unwrap(),
+        headers: HashMap::from([("Host".to_string(), "http://google.com".to_string())]),
+    };
+
+    let response = client.execute(request);
+    assert!(response.is_ok());
+    match response {
+        Ok(r) => {
+            assert_eq!("OK", r.body.trim())
+        }
+        Err(_err) => {}
     }
 }

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, io::Read, net::TcpStream};
 
 // struct to represent HTTP Response
 #[derive(Debug, Clone)]
@@ -45,7 +45,7 @@ impl StatusCode {
         }
     }
 
-    fn to_reason_phrase(&self) -> &str {
+    pub fn to_reason_phrase(&self) -> &str {
         match self {
             StatusCode::OK => "OK",
             StatusCode::MovedPermanently => "Moved Permanently",
@@ -62,7 +62,7 @@ impl StatusCode {
         }
     }
 
-    fn to_u32(&self) -> u32 {
+    pub fn to_u32(&self) -> u32 {
         match self {
             StatusCode::OK => 200,
             StatusCode::MovedPermanently => 301,
@@ -81,6 +81,13 @@ impl StatusCode {
 }
 
 impl HttpResponse {
+    pub fn from_socket(stream: &TcpStream) -> Result<Self, Box<dyn std::error::Error>> {
+        // first read headers
+        // let headers = stream.
+        // validate content_length to know how many bytes to read
+
+        return Err("asdasd".into());
+    }
     pub fn to_string(&self) -> String {
         let reason_phrase = self.status_code.to_reason_phrase();
         let mut headers_vec: Vec<String> = Vec::new();
@@ -111,45 +118,54 @@ impl HttpResponse {
 
     pub fn from_string(response: &str) -> Result<Self, Box<dyn std::error::Error>> {
         log::debug!("[from_string] parsing response from: \n{}\n", response);
-        let mut lines = response.lines();
-        let first_line = lines.next().unwrap();
-        let mut words = first_line.split_whitespace();
-        let _http_version = match words.next() {
-            Some(http_version) => match http_version {
-                "HTTP/1.1" => "HTTP/1.1",
-                "HTTP/1.0" => "HTTP/1.0",
-                _ => return Err(format!("failed to parse http version: {}", http_version).into()),
-            },
-            None => return Err("failed to parse http version".into()),
+        let lines: Vec<&str> = response.lines().collect();
+        let first_line = lines[0];
+        let words: Vec<&str> = first_line.split_whitespace().collect();
+        let _http_version = match words[0] {
+            "HTTP/1.1" => "HTTP/1.1",
+            "HTTP/1.0" => "HTTP/1.0",
+            _ => return Err(format!("failed to parse http version: {}", words[0]).into()),
         };
-        let status_code = match words.next() {
-            Some(status_code) => match status_code.parse::<u32>() {
-                Ok(status_code) => {
-                    if status_code < 100 || status_code > 599 {
-                        return Err("failed to parse status code".into());
-                    }
-                    StatusCode::from_u32(status_code)?
+
+        let status_code = match words[1].parse::<u32>() {
+            Ok(status_code) => {
+                if status_code < 100 || status_code > 599 {
+                    return Err("failed to parse status code".into());
                 }
-                Err(_e) => return Err("failed to parse status code".into()),
-            },
-            None => return Err("failed to parse status code".into()),
+                StatusCode::from_u32(status_code)?
+            }
+            Err(_e) => return Err("failed to parse status code".into()),
         };
         let mut headers = Vec::new();
 
-        for line in lines.clone() {
-            if line.is_empty() {
+        for i in 1..lines.len() {
+            if lines[i].is_empty() {
                 break;
             }
-            headers.push(line.to_string());
+            headers.push(lines[i].to_string());
         }
         let mut headers_map: HashMap<String, String> = HashMap::new();
         for header in headers {
-            let mut components = header.splitn(2, ":");
-            let key: String = components.next().unwrap().to_string();
-            let value: String = components.next().unwrap().trim().to_string();
+            let components: Vec<&str> = header.splitn(2, ":").collect();
+            if components.len() != 2 {
+                return Err(format!("invalid headers {}", header).into());
+            }
+            let key: String = components[0].to_string();
+            let value: String = components[1].trim().to_string();
             headers_map.insert(key, value);
         }
-        let body: Vec<&str> = response.split("\r\n\r\n").collect();
+        let content_length: usize = headers_map
+            .get("Content-Length")
+            .expect("missing header")
+            .parse()
+            .expect("failed to parse");
+
+        let body = response
+            .split("\r\n\r\n")
+            .last()
+            .unwrap()
+            .split_at(content_length)
+            .0;
         //     Some(body) => body.to_string(),
         //     None => return Err("failed to parse body".into()),
         // };
@@ -157,7 +173,7 @@ impl HttpResponse {
         Ok(Self {
             status_code,
             headers: headers_map,
-            body: "".to_string(),
+            body: body.to_string(),
         })
     }
 }
@@ -177,13 +193,13 @@ fn test_from_string() {
     let test_cases = [
         TestCase {
             _name: "simple 200 OK".to_string(),
-            input: "HTTP/1.1 200 OK\r\nDate: Mon, 23 May 2023 22:38:34 GMT\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Length: 138\r\n\r\n<html>\r\n<head>\r\n<title>An Example Page</title>\r\n</head>\r\n<body>\r\nHello World, this is a very simple HTML document.\r\n</body>\r\n</html>".to_string(),
+            input: "HTTP/1.1 200 OK\r\nDate: Mon, 23 May 2023 22:38:34 GMT\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Length: 132\r\n\r\n<html>\r\n<head>\r\n<title>An Example Page</title>\r\n</head>\r\n<body>\r\nHello World, this is a very simple HTML document.\r\n</body>\r\n</html>".to_string(),
             expected: Some(HttpResponse {
                 status_code: StatusCode::OK,
                 headers: [
                     ("Date".to_string(), "Mon, 23 May 2023 22:38:34 GMT".to_string()),
                     ("Content-Type".to_string(), "text/html; charset=UTF-8".to_string()),
-                    ("Content-Length".to_string(), "138".to_string()),
+                    ("Content-Length".to_string(), "132".to_string()),
                 ]
                 .iter()
                 .cloned()
@@ -194,13 +210,13 @@ fn test_from_string() {
         },
         TestCase {
             _name: "simple 404 Not Found".to_string(),
-            input: "HTTP/1.1 404 Not Found\r\nDate: Mon, 23 May 2023 22:38:34 GMT\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Length: 138\r\n\r\n<html>\r\n<head>\r\n<title>An Example Page</title>\r\n</head>\r\n<body>\r\nHello World, this is a very simple HTML document.\r\n</body>\r\n</html>".to_string(),
+            input: "HTTP/1.1 404 Not Found\r\nDate: Mon, 23 May 2023 22:38:34 GMT\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Length: 132\r\n\r\n<html>\r\n<head>\r\n<title>An Example Page</title>\r\n</head>\r\n<body>\r\nHello World, this is a very simple HTML document.\r\n</body>\r\n</html>".to_string(),
             expected: Some(HttpResponse {
                 status_code: StatusCode::NotFound,
                 headers: [
                     ("Date".to_string(), "Mon, 23 May 2023 22:38:34 GMT".to_string()),
                     ("Content-Type".to_string(), "text/html; charset=UTF-8".to_string()),
-                    ("Content-Length".to_string(), "138".to_string()),
+                    ("Content-Length".to_string(), "132".to_string()),
                 ]
                 .iter()
                 .cloned()
@@ -211,13 +227,13 @@ fn test_from_string() {
         },
         TestCase{
             _name: "301 Moved Permanently".to_string(),
-            input: "HTTP/1.1 301 Moved Permanently\r\nLocation: https://www.example.com/\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Length: 123\r\n\r\n<html>\r\n<head><title>301 Moved Permanently</title></head>\r\n<body>\r\n<p>The document has moved <a href=\"https://www.example.com/\">here</a>.</p>\r\n</body>\r\n</html>".to_string(),
+            input: "HTTP/1.1 301 Moved Permanently\r\nLocation: https://www.example.com/\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Length: 159\r\n\r\n<html>\r\n<head><title>301 Moved Permanently</title></head>\r\n<body>\r\n<p>The document has moved <a href=\"https://www.example.com/\">here</a>.</p>\r\n</body>\r\n</html>".to_string(),
             expected: Some(HttpResponse {
                 status_code: StatusCode::MovedPermanently,
                 headers: [
                     ("Location".to_string(), "https://www.example.com/".to_string()),
                     ("Content-Type".to_string(), "text/html; charset=UTF-8".to_string()),
-                    ("Content-Length".to_string(), "123".to_string()),
+                    ("Content-Length".to_string(), "159".to_string()),
                 ]
                 .iter()
                 .cloned()
@@ -228,12 +244,12 @@ fn test_from_string() {
         },
         TestCase{
             _name: "simple 405 Method Not Allowed".to_string(),
-            input: "HTTP/1.1 405 Method Not Allowed\r\nDate: Mon, 23 May 2023 22:38:34 GMT\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Length: 138\r\n\r\n<html>\r\n<head>\r\n<title>An Example Page</title>\r\n</head>\r\n<body>\r\nHello World, this is a very simple HTML document.\r\n</body>\r\n</html>".to_string(),
+            input: "HTTP/1.1 405 Method Not Allowed\r\nDate: Mon, 23 May 2023 22:38:34 GMT\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Length: 132\r\n\r\n<html>\r\n<head>\r\n<title>An Example Page</title>\r\n</head>\r\n<body>\r\nHello World, this is a very simple HTML document.\r\n</body>\r\n</html>".to_string(),
             expected: Some(HttpResponse {
                 status_code: StatusCode::MethodNotAllowed,
                 headers: [
                     ("Content-Type".to_string(), "text/html; charset=UTF-8".to_string()),
-                    ("Content-Length".to_string(), "138".to_string()),
+                    ("Content-Length".to_string(), "132".to_string()),
                     ("Date".to_string(), "Mon, 23 May 2023 22:38:34 GMT".to_string()),
                 ]
                 .iter()
@@ -245,7 +261,7 @@ fn test_from_string() {
         },
         TestCase{
             _name: "missing status code".to_string(),
-            input: "HTTP/1.1 OK\r\nDate: Mon, 23 May 2023 22:38:34 GMT\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Length: 138\r\n\r\n<html>\r\n<head>\r\n<title>An Example Page</title>\r\n</head>\r\n<body>\r\nHello World, this is a very simple HTML document.\r\n</body>\r\n</html>".to_string(),
+            input: "HTTP/1.1 OK\r\nDate: Mon, 23 May 2023 22:38:34 GMT\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Length: 159\r\n\r\n<html>\r\n<head>\r\n<title>An Example Page</title>\r\n</head>\r\n<body>\r\nHello World, this is a very simple HTML document.\r\n</body>\r\n</html>".to_string(),
             expected: None,
             expected_error: true,
         },
