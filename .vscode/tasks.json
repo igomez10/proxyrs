@@ -21,8 +21,11 @@
 				"-x",
 				"run -q"
 			],
+			"icon": {
+				"color": "terminal.ansiGreen"
+			},
 			"group": "build",
-			"label": "watch"
+			"label": "watch run"
 		},
 		{
 			"type": "cargo",
@@ -32,6 +35,47 @@
 			],
 			"group": "build",
 			"label": "rust: cargo build"
+		},
+		{
+			"type": "cargo",
+			"icon": {
+				"color": "terminal.ansiYellow"
+			},
+			"command": "watch",
+			"args": [
+				"-q",
+				"-c",
+				"-w",
+				"src/",
+				"-x",
+				"clippy"
+			],
+			"problemMatcher": [
+				"$rustc"
+			],
+			"group": "build",
+			"label": "watch clippy"
+		},
+		// docs watch
+		{
+			"type": "cargo",
+			"command": "watch",
+			"icon": {
+				"color": "terminal.ansiBlue"
+			},
+			"args": [
+				"-q",
+				"-c",
+				"-w",
+				"src/",
+				"-x",
+				"doc --no-deps"
+			],
+			"problemMatcher": [
+				"$rustc"
+			],
+			"group": "build",
+			"label": "watch docs"
 		},
 	]
 }

@@ -1,5 +1,5 @@
-use std::{collections::HashMap, io::Read, net::TcpStream};
-
+use crate::status_code::StatusCode;
+use std::collections::HashMap;
 // struct to represent HTTP Response
 #[derive(Debug, Clone)]
 pub struct HttpResponse {
@@ -8,87 +8,8 @@ pub struct HttpResponse {
     pub body: String,
 }
 
-// enum for status code
-#[derive(Debug, Clone, PartialEq)]
-pub enum StatusCode {
-    OK = 200,
-    MovedPermanently = 301,
-    Found = 302,
-    NotFound = 404,
-    InvalidRequest = 400,
-    Unauthorized = 401,
-    Forbidden = 403,
-    MethodNotAllowed = 405,
-    NotAcceptable = 406,
-    InternalServerError = 500,
-    NotImplemented = 501,
-    BadGateway = 502,
-}
-
-impl StatusCode {
-    pub fn from_u32(status_code: u32) -> Result<Self, Box<dyn std::error::Error>> {
-        match status_code {
-            200 => Ok(StatusCode::OK),
-            301 => Ok(StatusCode::MovedPermanently),
-            302 => Ok(StatusCode::Found),
-            400 => Ok(StatusCode::InvalidRequest),
-            404 => Ok(StatusCode::NotFound),
-            401 => Ok(StatusCode::Unauthorized),
-            403 => Ok(StatusCode::Forbidden),
-            405 => Ok(StatusCode::MethodNotAllowed),
-            406 => Ok(StatusCode::NotAcceptable),
-            500 => Ok(StatusCode::InternalServerError),
-            501 => Ok(StatusCode::NotImplemented),
-            502 => Ok(StatusCode::BadGateway),
-            0..=99 | 600..=u32::MAX => Err("invalid status code".into()),
-            _ => Err("unknown status code".into()),
-        }
-    }
-
-    pub fn to_reason_phrase(&self) -> &str {
-        match self {
-            StatusCode::OK => "OK",
-            StatusCode::MovedPermanently => "Moved Permanently",
-            StatusCode::Found => "Found",
-            StatusCode::InvalidRequest => "Invalid Request",
-            StatusCode::NotFound => "Not Found",
-            StatusCode::Unauthorized => "Unauthorized",
-            StatusCode::Forbidden => "Forbidden",
-            StatusCode::MethodNotAllowed => "Method Not Allowed",
-            StatusCode::NotAcceptable => "Not Acceptable",
-            StatusCode::InternalServerError => "Internal Server Error",
-            StatusCode::NotImplemented => "Not Implemented",
-            StatusCode::BadGateway => "Bad Gateway",
-        }
-    }
-
-    pub fn to_u32(&self) -> u32 {
-        match self {
-            StatusCode::OK => 200,
-            StatusCode::MovedPermanently => 301,
-            StatusCode::Found => 302,
-            StatusCode::InvalidRequest => 400,
-            StatusCode::NotFound => 404,
-            StatusCode::Unauthorized => 401,
-            StatusCode::Forbidden => 403,
-            StatusCode::MethodNotAllowed => 405,
-            StatusCode::NotAcceptable => 406,
-            StatusCode::InternalServerError => 500,
-            StatusCode::NotImplemented => 501,
-            StatusCode::BadGateway => 502,
-        }
-    }
-}
-
 impl HttpResponse {
-    pub fn from_socket(stream: &TcpStream) -> Result<Self, Box<dyn std::error::Error>> {
-        // first read headers
-        // let headers = stream.
-        // validate content_length to know how many bytes to read
-
-        return Err("asdasd".into());
-    }
-    pub fn to_string(&self) -> String {
+    pub fn serialize(&self) -> String {
         let reason_phrase = self.status_code.to_reason_phrase();
         let mut headers_vec: Vec<String> = Vec::new();
 
@@ -113,7 +34,7 @@ impl HttpResponse {
             headers,
             self.body
         )
-        .replace("\0", "")
+        .replace('\0', "")
     }
 
     pub fn from_string(response: &str) -> Result<Self, Box<dyn std::error::Error>> {
@@ -129,7 +50,7 @@ impl HttpResponse {
 
         let status_code = match words[1].parse::<u32>() {
             Ok(status_code) => {
-                if status_code < 100 || status_code > 599 {
+                if !(100..=599).contains(&status_code) {
                     return Err("failed to parse status code".into());
                 }
                 StatusCode::from_u32(status_code)?
@@ -138,15 +59,15 @@ impl HttpResponse {
         };
         let mut headers = Vec::new();
 
-        for i in 1..lines.len() {
-            if lines[i].is_empty() {
+        for line in lines.iter().skip(1) {
+            if line.is_empty() {
                 break;
             }
-            headers.push(lines[i].to_string());
+            headers.push(line.to_string());
         }
         let mut headers_map: HashMap<String, String> = HashMap::new();
         for header in headers {
-            let components: Vec<&str> = header.splitn(2, ":").collect();
+            let components: Vec<&str> = header.splitn(2, ':').collect();
             if components.len() != 2 {
                 return Err(format!("invalid headers {}", header).into());
             }
@@ -180,7 +101,7 @@ impl HttpResponse {
 
 // test for from_string
 #[test]
-fn test_from_string() {
+fn test_serialize() {
     // testcase struct
     struct TestCase {
         _name: String,
@@ -366,9 +287,14 @@ fn test_to_string() {
     // iterate over testcases
     for test_case in test_cases.iter() {
         // call to_string on each testcase
-        let actual = test_case.input.to_string();
+        let actual = test_case.input.serialize();
 
         // assert that actual is equal to expected
         assert_eq!(actual, test_case.expected, "{}", test_case._name);
     }
 }
+
+// #[test]
+// fn test_from_socket() {
+//     let socket = TcpStream::
+// }

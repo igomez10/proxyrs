@@ -1,16 +1,19 @@
+mod http_client;
 mod http_request;
 mod http_response;
+mod status_code;
 mod utils;
 extern crate dotenv;
 use dotenv::dotenv;
-use env_logger;
 use http_request::HttpRequest;
-use http_response::{HttpResponse, StatusCode};
+use http_response::HttpResponse;
+use status_code::StatusCode;
 use std::collections::HashMap;
 use std::net::TcpListener;
 use std::net::TcpStream;
+use utils::write_to_stream;
 
-use crate::http_request::HTTPClient;
+use crate::http_client::HTTPClient;
 
 fn main() {
     match dotenv().ok() {
@@ -31,7 +34,8 @@ fn health_handler(socket: &mut TcpStream) {
         headers: HashMap::from([("Content-Length".to_string(), "2".to_string())]),
         body: "OK".to_string(),
     };
-    utils::write_to_stream(socket, &response.to_string());
+
+    write_to_stream(socket, &response.serialize()).expect("failed to write to socket");
 }
 
 // function to listen incoming tcp connections on port
@@ -54,7 +58,8 @@ fn listen(address: &str, port: &str) {
                             headers: HashMap::new(),
                             body: "Bad Request".to_string(),
                         };
-                        utils::write_to_stream(&mut socket, &response.to_string());
+                        write_to_stream(&mut socket, &response.serialize())
+                            .expect("failed to write to socket");
                         close_socket(socket);
                         continue;
                     }
@@ -69,7 +74,9 @@ fn listen(address: &str, port: &str) {
                             headers: HashMap::new(),
                             body: "Bad Request".to_string(),
                         };
-                        utils::write_to_stream(&mut socket, &response.to_string());
+
+                        write_to_stream(&mut socket, &response.serialize())
+                            .expect("failed to write to socket");
                         close_socket(socket);
                         continue;
                     }
@@ -94,13 +101,15 @@ fn listen(address: &str, port: &str) {
                             headers: HashMap::new(),
                             body: "Bad Request".to_string(),
                         };
-                        utils::write_to_stream(&mut socket, &response.to_string());
+                        write_to_stream(&mut socket, &response.serialize())
+                            .expect("failed to write to socket");
                         close_socket(socket);
                         continue;
                     }
                 };
 
-                utils::write_to_stream(&mut socket, &actual_response.to_string());
+                write_to_stream(&mut socket, &actual_response.serialize())
+                    .expect("failed to write to socket");
                 close_socket(socket)
             }
             Err(e) => {
@@ -132,7 +141,7 @@ fn test_listen() {
     let client = HTTPClient::new(HashMap::new());
 
     let request = HttpRequest {
-        method: http_request::Method::GET,
+        method: http_request::Method::Get,
         body: "".to_string(),
         url: url::Url::parse("http://localhost:5656/health").unwrap(),
         headers: HashMap::from([("Host".to_string(), "http://google.com".to_string())]),

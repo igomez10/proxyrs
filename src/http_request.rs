@@ -1,10 +1,5 @@
-use crate::http_response::HttpResponse;
-use crate::utils::{self, nslookup, write_to_stream};
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::HashMap,
-    net::{SocketAddr, TcpStream},
-};
+use std::collections::HashMap;
 
 // struct to represent HTTP Request
 #[derive(Debug, Clone)]
@@ -19,10 +14,10 @@ pub struct HttpRequest {
 // enum for methods implements Display trait
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub enum Method {
-    GET,
-    POST,
-    PUT,
-    DELETE,
+    Get,
+    Post,
+    Put,
+    Delete,
 }
 
 impl HttpRequest {
@@ -32,10 +27,10 @@ impl HttpRequest {
         let words_first_line: Vec<&str> = first_line.split_whitespace().collect();
 
         let method = match words_first_line[0] {
-            "GET" => Method::GET,
-            "POST" => Method::POST,
-            "PUT" => Method::PUT,
-            "DELETE" => Method::DELETE,
+            "GET" => Method::Get,
+            "POST" => Method::Post,
+            "PUT" => Method::Put,
+            "DELETE" => Method::Delete,
             _ => return Err("[from_string] failed to parse method".into()),
         };
 
@@ -46,31 +41,29 @@ impl HttpRequest {
         let mut headers: HashMap<String, String> = HashMap::new();
         let mut body = String::new();
         let mut header_break: bool = false;
-        for i in 1..lines.len() {
-            if lines[i].is_empty() {
+        for line in lines.iter().skip(1) {
+            if line.is_empty() {
                 header_break = true;
             }
             if !header_break {
-                let components: Vec<&str> = lines[i].splitn(2, ":").collect();
+                let components: Vec<&str> = line.splitn(2, ':').collect();
                 let key: String = components[0].to_string();
                 let value: String = components[1].trim().to_string();
                 headers.insert(key, value);
             } else {
-                log::debug!("[from_string] line: {}", lines[i]);
-                body.push_str(lines[i]);
+                log::debug!("[from_string] line: {}", line);
+                body.push_str(line);
             }
         }
 
         let host_header = headers.get("Host").expect("missing host header");
         let is_proxy_request = resource.starts_with("http://") || resource.starts_with("https://");
-        let url: url::Url;
-
-        if is_proxy_request {
-            url = url::Url::parse(resource).expect("failed to parse url");
+        let url = if is_proxy_request {
+            url::Url::parse(resource).unwrap()
         } else {
             let url_str = format!("{}{}", host_header, resource);
-            url = url::Url::parse(&url_str).expect("failed to parse url");
-        }
+            url::Url::parse(&url_str).unwrap()
+        };
 
         Ok(Self {
             method,
@@ -80,7 +73,7 @@ impl HttpRequest {
         })
     }
 
-    pub fn to_string(&self) -> String {
+    pub fn serialize(&self) -> String {
         let mut request_string = format!("{:?} {} HTTP/1.1\r\n", self.method, self.url.path());
         for (key, value) in self.headers.iter() {
             request_string.push_str(format!("{}: {}\r\n", key, value).as_str());
@@ -92,49 +85,6 @@ impl HttpRequest {
     }
 }
 
-pub struct HTTPClient {
-    pub default_headers: HashMap<String, String>,
-}
-
-impl HTTPClient {
-    pub fn new(default_headers: HashMap<String, String>) -> Self {
-        Self {
-            default_headers: default_headers,
-        }
-    }
-
-    pub fn execute(
-        &self,
-        request: HttpRequest,
-    ) -> Result<HttpResponse, Box<dyn std::error::Error>> {
-        let ip_address = nslookup(
-            request
-                .url
-                .host_str()
-                .expect("failed to get url host: {}")
-                .to_string(),
-        )
-        .expect("failed to resolve domain name to ip address");
-
-        let port = request.url.port().unwrap_or(80);
-
-        let socket_address = SocketAddr::new(ip_address, port);
-        let mut stream = TcpStream::connect(socket_address).expect("failed to connect to server");
-
-        let request_string = request.to_string();
-        log::debug!("request string: {}", request_string);
-        write_to_stream(&mut stream, &request_string);
-        write_to_stream(&mut stream, "\r\n");
-
-        // read from socket
-        let response_string =
-            utils::read_from_stream(&mut stream).expect("failed to read from socket");
-        let response =
-            HttpResponse::from_string(&response_string).expect("failed to parse response");
-        Ok(response)
-    }
-}
-
 // test for httpRequest parsing
 #[test]
 fn test_httprequest_from_string() {
@@ -142,23 +92,11 @@ fn test_httprequest_from_string() {
         "GET / HTTP/1.1\r\nHost: localhost:8080\r\nUser-Agent: curl/7.64.1\r\nAccept: */*\r\n\r\n";
 
     let request = HttpRequest::from_string(dummy_request).unwrap();
-    assert_eq!(request.method, Method::GET);
+    assert_eq!(request.method, Method::Get);
     assert_eq!(request.url, url::Url::parse("localhost:8080/").unwrap());
     assert_eq!(request.headers.get("Host").unwrap(), "localhost:8080");
     assert_eq!(request.headers.get("User-Agent").unwrap(), "curl/7.64.1");
     assert_eq!(request.headers.get("Accept").unwrap(), "*/*");
-}
-
-// test for proxy request
-#[test]
-fn test_proxy_request() {
-    let dummy_request =
-        "GET http://google.com HTTP/1.1\r\nHost: http://google.com\r\nUser-Agent: curl/7.64.1\r\nAccept: */*\r\n\r\n";
-
-    let request = HttpRequest::from_string(dummy_request).unwrap();
-    let client = HTTPClient::new(HashMap::new());
-    let response = client.execute(request).unwrap();
-    assert_eq!(response.status_code.to_u32(), 400);
 }
 
 // test for from_string
@@ -178,7 +116,7 @@ fn test_from_string() {
             _name: "simple request".to_string(),
             input: "GET / HTTP/1.1\r\nHost: localhost:8080\r\nUser-Agent: curl/7.64.1\r\nAccept: */*\r\n\r\n".to_string(),
             expected: Some(HttpRequest {
-                method: Method::GET,
+                method: Method::Get,
                 headers: [
                     ("User-Agent".to_string(), "curl/7.64.1".to_string()),
                     ("Accept".to_string(), "*/*".to_string()),
