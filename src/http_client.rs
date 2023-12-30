@@ -6,7 +6,7 @@ use std::{
 use crate::{
     http_request::HttpRequest,
     http_response::HttpResponse,
-    utils::{self, nslookup, write_to_stream},
+    utils::{nslookup, write_to_stream},
 };
 
 pub struct HTTPClient {
@@ -46,10 +46,10 @@ impl HTTPClient {
 // test for proxy request
 #[test]
 fn test_proxy_request() {
-    let dummy_request =
-        "GET http://google.com HTTP/1.1\r\nHost: http://google.com\r\nUser-Agent: curl/7.64.1\r\nAccept: */*\r\n\r\n";
+    let mut dummy_request =
+        "GET http://google.com HTTP/1.1\r\nHost: http://google.com\r\nUser-Agent: curl/7.64.1\r\nAccept: */*\r\n\r\n".as_bytes();
 
-    let request = HttpRequest::from_string(dummy_request).unwrap();
+    let request = HttpRequest::from_stream(&mut dummy_request).unwrap();
     let client = HTTPClient::new(HashMap::new());
     let response = client.execute(request).unwrap();
     assert_eq!(response.status_code.to_u32(), 400);

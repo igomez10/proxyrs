@@ -5,7 +5,7 @@ use url::Url;
 #[derive(Debug, Clone)]
 pub struct HttpRequest {
     pub method: Method,
-    pub url: url::Url,
+    pub url: Url,
     // headers i a map of string to vec string
     pub headers: HashMap<String, String>,
     pub body: String,
@@ -14,58 +14,6 @@ pub struct HttpRequest {
 impl HttpRequest {
     pub fn from_stream(stream: &mut dyn Read) -> Result<Self, Box<dyn std::error::Error>> {
         utils::read_request(stream)
-    }
-
-    pub fn from_string(request: &str) -> Result<Self, Box<dyn std::error::Error>> {
-        let lines: Vec<&str> = request.lines().collect();
-        let first_line = lines[0];
-        let words_first_line: Vec<&str> = first_line.split_whitespace().collect();
-
-        let method = match words_first_line[0] {
-            "GET" => Method::Get,
-            "POST" => Method::Post,
-            "PUT" => Method::Put,
-            "DELETE" => Method::Delete,
-            _ => return Err("[from_string] failed to parse method".into()),
-        };
-
-        // resource can be a path or a url. It will be a url when the request is proxied
-        let resource = words_first_line[1];
-        let _protocol = words_first_line[2];
-
-        let mut headers: HashMap<String, String> = HashMap::new();
-        let mut body = String::new();
-        let mut header_break: bool = false;
-        for line in lines.iter().skip(1) {
-            if line.is_empty() {
-                header_break = true;
-            }
-            if !header_break {
-                let components: Vec<&str> = line.splitn(2, ':').collect();
-                let key: String = components[0].to_string();
-                let value: String = components[1].trim().to_string();
-                headers.insert(key, value);
-            } else {
-                log::debug!("[from_string] line: {}", line);
-                body.push_str(line);
-            }
-        }
-
-        let host_header = headers.get("Host").expect("missing host header");
-        let is_proxy_request = resource.starts_with("http://") || resource.starts_with("https://");
-        let request_url = if is_proxy_request {
-            Url::parse(resource).unwrap()
-        } else {
-            let url_str = format!("{}{}", host_header, resource);
-            Url::parse(&url_str).unwrap()
-        };
-
-        Ok(Self {
-            method,
-            url: request_url,
-            headers,
-            body,
-        })
     }
 
     pub fn serialize(&self) -> String {
@@ -83,12 +31,13 @@ impl HttpRequest {
 // test for httpRequest parsing
 #[test]
 fn test_httprequest_from_string() {
-    let dummy_request =
-        "GET / HTTP/1.1\r\nHost: localhost:8080\r\nUser-Agent: curl/7.64.1\r\nAccept: */*\r\n\r\n";
+    let mut dummy_request =
+        "GET / HTTP/1.1\r\nHost: localhost:8080\r\nUser-Agent: curl/7.64.1\r\nAccept: */*\r\n\r\n"
+            .as_bytes();
 
-    let request = HttpRequest::from_string(dummy_request).unwrap();
+    let request = HttpRequest::from_stream(&mut dummy_request).unwrap();
     assert_eq!(request.method, Method::Get);
-    assert_eq!(request.url, url::Url::parse("localhost:8080/").unwrap());
+    assert_eq!(request.url, Url::parse("localhost:8080/").unwrap());
     assert_eq!(request.headers.get("Host").unwrap(), "localhost:8080");
     assert_eq!(request.headers.get("User-Agent").unwrap(), "curl/7.64.1");
     assert_eq!(request.headers.get("Accept").unwrap(), "*/*");
@@ -137,7 +86,8 @@ fn test_from_string() {
     // iterate over testcases
     for test_case in test_cases.iter() {
         // call from_string on each testcase
-        let actual = match HttpRequest::from_string(&test_case.input) {
+        let mut stream = test_case.input.as_bytes();
+        let actual = match HttpRequest::from_stream(&mut stream) {
             Ok(response) => response,
             Err(_e) => {
                 assert!(test_case.expected_error);

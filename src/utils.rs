@@ -1,9 +1,6 @@
-use crate::http_method;
-
 use crate::http_method::Method;
 use crate::http_request::HttpRequest;
 use crate::http_response::HttpResponse;
-use crate::status_code;
 use crate::status_code::StatusCode;
 use dns_lookup::lookup_host;
 
@@ -56,7 +53,7 @@ pub fn read_request(stream: &mut dyn Read) -> Result<HttpRequest, Box<dyn std::e
     buf_reader.read_line(&mut first_line)?;
 
     let words_first_line: Vec<&str> = first_line.split_whitespace().collect();
-    let method = http_method::Method::from_str(words_first_line[0])?;
+    let method = Method::from_str(words_first_line[0])?;
     let resource = words_first_line[1];
     let _protocol = words_first_line[2];
 
@@ -113,8 +110,8 @@ pub fn read_response(stream: &mut dyn Read) -> Result<HttpResponse, Box<dyn std:
     buf_reader.read_line(&mut first_line)?;
 
     let words_first_line: Vec<&str> = first_line.split_whitespace().collect();
-    let protocol = words_first_line[0];
-    let status_code = status_code::StatusCode::from_u32(words_first_line[1].parse()?)?;
+    let _protocol = words_first_line[0];
+    let status_code = StatusCode::from_u32(words_first_line[1].parse()?)?;
 
     let mut headers: HashMap<String, String> = HashMap::new();
     loop {

@@ -36,67 +36,6 @@ impl HttpResponse {
         )
         .replace('\0', "")
     }
-
-    pub fn from_string(response: &str) -> Result<Self, Box<dyn std::error::Error>> {
-        log::debug!("[from_string] parsing response from: \n{}\n", response);
-        let lines: Vec<&str> = response.lines().collect();
-        let first_line = lines[0];
-        let words: Vec<&str> = first_line.split_whitespace().collect();
-        let _http_version = match words[0] {
-            "HTTP/1.1" => "HTTP/1.1",
-            "HTTP/1.0" => "HTTP/1.0",
-            _ => return Err(format!("failed to parse http version: {}", words[0]).into()),
-        };
-
-        let status_code = match words[1].parse::<u32>() {
-            Ok(status_code) => {
-                if !(100..=599).contains(&status_code) {
-                    return Err("failed to parse status code".into());
-                }
-                StatusCode::from_u32(status_code)?
-            }
-            Err(_e) => return Err("failed to parse status code".into()),
-        };
-        let mut headers = Vec::new();
-
-        for line in lines.iter().skip(1) {
-            if line.is_empty() {
-                break;
-            }
-            headers.push(line.to_string());
-        }
-        let mut headers_map: HashMap<String, String> = HashMap::new();
-        for header in headers {
-            let components: Vec<&str> = header.splitn(2, ':').collect();
-            if components.len() != 2 {
-                return Err(format!("invalid headers {}", header).into());
-            }
-            let key: String = components[0].to_string();
-            let value: String = components[1].trim().to_string();
-            headers_map.insert(key, value);
-        }
-        let content_length: usize = headers_map
-            .get("Content-Length")
-            .expect("missing header")
-            .parse()
-            .expect("failed to parse");
-
-        let body = response
-            .split("\r\n\r\n")
-            .last()
-            .unwrap()
-            .split_at(content_length)
-            .0;
-        //     Some(body) => body.to_string(),
-        //     None => return Err("failed to parse body".into()),
-        // };
-
-        Ok(Self {
-            status_code,
-            headers: headers_map,
-            body: body.to_string(),
-        })
-    }
 }
 
 // test for from_string
@@ -208,7 +147,8 @@ fn test_serialize() {
     // iterate over testcases
     for test_case in test_cases.iter() {
         // call from_string on each testcase
-        let actual = match HttpResponse::from_string(&test_case.input) {
+        let mut stream = test_case.input.as_bytes();
+        let actual = match HttpResponse::from_stream(&mut stream) {
             Ok(response) => response,
             Err(_e) => {
                 assert!(test_case.expected_error);
