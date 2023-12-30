@@ -26,7 +26,6 @@ impl HttpResponse {
         headers_vec.sort();
         let headers = headers_vec.join("");
 
-        log::debug!("[to_string] headers string in response: {:?}", headers_vec);
         format!(
             "HTTP/1.1 {} {}\r\n{}\r\n{}",
             self.status_code.to_u32(),
@@ -206,22 +205,6 @@ fn test_to_string() {
             },
             expected: "HTTP/1.1 200 OK\r\nContent-Length: 138\r\nContent-Type: text/html; charset=UTF-8\r\nDate: Mon, 23 May 2023 22:38:34 GMT\r\n\r\n<html>\r\n<head>\r\n<title>An Example Page</title>\r\n</head>\r\n<body>\r\nHello World, this is a very simple HTML document.\r\n</body>\r\n</html>".to_string(),
         },
-        // TestCase {
-        //     _name: "simple 404 Not Found".to_string(),
-        //     input: HttpResponse {
-        //         status_code: StatusCode::NotFound,
-        //         headers: [
-        //             ("Date".to_string(), "Mon, 23 May 2023 22:38:34 GMT".to_string()),
-        //             ("Content-Type".to_string(), "text/html; charset=UTF-8".to_string()),
-        //             ("Content-Length".to_string(), "138".to_string()),
-        //         ]
-        //         .iter()
-        //         .cloned()
-        //         .collect(),
-        //         body: "<html>\r\n<head>\r\n<title>An Example Page</title>\r\n</head>\r\n<body>\r\nHello World, this is a very simple HTML document.\r\n</body>\r\n</html>".to_string(),
-        //     },
-        //     expected: "HTTP/1.1 404 Not Found\r\nDate: Mon, 23 May".to_string(),
-        // },
     ];
 
     // iterate over testcases
