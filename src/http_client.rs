@@ -6,7 +6,7 @@ use std::{
 use crate::{
     http_request::HttpRequest,
     http_response::HttpResponse,
-    utils::{nslookup, read_from_stream, write_to_stream},
+    utils::{self, nslookup, write_to_stream},
 };
 
 pub struct HTTPClient {
@@ -37,14 +37,8 @@ impl HTTPClient {
         let mut stream = TcpStream::connect(socket_address).expect("failed to connect to server");
 
         let request_string = request.serialize();
-        log::debug!("request string: {}", request_string);
         write_to_stream(&mut stream, &request_string).expect("failed to write to socket");
-        write_to_stream(&mut stream, "\r\n").expect("failed to write to socket");
-
-        // read from socket
-        let response_string = read_from_stream(&mut stream).expect("failed to read from socket");
-        let response =
-            HttpResponse::from_string(&response_string).expect("failed to parse response");
+        let response = HttpResponse::from_stream(&mut stream).expect("failed to read from socket");
         Ok(response)
     }
 }

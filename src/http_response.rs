@@ -1,5 +1,5 @@
-use crate::status_code::StatusCode;
-use std::collections::HashMap;
+use crate::{status_code::StatusCode, utils};
+use std::{collections::HashMap, io::Read};
 // struct to represent HTTP Response
 #[derive(Debug, Clone)]
 pub struct HttpResponse {
@@ -9,6 +9,9 @@ pub struct HttpResponse {
 }
 
 impl HttpResponse {
+    pub fn from_stream(stream: &mut dyn Read) -> Result<Self, Box<dyn std::error::Error>> {
+        utils::read_response(stream)
+    }
     pub fn serialize(&self) -> String {
         let reason_phrase = self.status_code.to_reason_phrase();
         let mut headers_vec: Vec<String> = Vec::new();

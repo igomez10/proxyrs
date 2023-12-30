@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use crate::{http_method::Method, utils};
+use std::{collections::HashMap, io::Read};
 use url::Url;
 // struct to represent HTTP Request
 #[derive(Debug, Clone)]
@@ -11,16 +11,11 @@ pub struct HttpRequest {
     pub body: String,
 }
 
-// enum for methods implements Display trait
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
-pub enum Method {
-    Get,
-    Post,
-    Put,
-    Delete,
-}
-
 impl HttpRequest {
+    pub fn from_stream(stream: &mut dyn Read) -> Result<Self, Box<dyn std::error::Error>> {
+        utils::read_request(stream)
+    }
+
     pub fn from_string(request: &str) -> Result<Self, Box<dyn std::error::Error>> {
         let lines: Vec<&str> = request.lines().collect();
         let first_line = lines[0];
@@ -74,7 +69,7 @@ impl HttpRequest {
     }
 
     pub fn serialize(&self) -> String {
-        let mut request_string = format!("{:?} {} HTTP/1.1\r\n", self.method, self.url.path());
+        let mut request_string = format!("{} {} HTTP/1.1\r\n", self.method, self.url.path());
         for (key, value) in self.headers.iter() {
             request_string.push_str(format!("{}: {}\r\n", key, value).as_str());
         }
